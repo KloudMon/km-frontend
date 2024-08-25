@@ -1,17 +1,38 @@
-// Protecting routes with next-auth
-// https://next-auth.js.org/configuration/nextjs#middleware
-// https://nextjs.org/docs/app/building-your-application/routing/middleware
+import { clerkMiddleware, createRouteMatcher } from "@clerk/nextjs/server";
+import { NextResponse } from "next/server";
 
-import NextAuth from 'next-auth';
-import authConfig from './auth.config';
+const isProtectedRoute = createRouteMatcher([
+  '/dashboard(.*)',
+]);
 
-const { auth } = NextAuth(authConfig);
-
-export default auth((req) => {
-  if (!req.auth) {
-    const url = req.url.replace(req.nextUrl.pathname, '/');
-    return Response.redirect(url);
+export default clerkMiddleware((auth, req) => {
+  const { userId } = auth();
+  const { pathname } = req.nextUrl;
+  console.log({userId})
+  // Redirect unauthenticated users to /login
+  if (!userId && pathname === '/') {
+    const url = req.nextUrl.clone()
+    url.pathname = '/login'
+    return NextResponse.redirect(url)
   }
+
+  // Redirect authenticated users to /dashboard
+  if (userId && pathname === '/') {
+    const url = req.nextUrl.clone()
+    url.pathname = '/dashboard'
+    return NextResponse.redirect(url)
+  }
+
+  // if (isLogoutRoute(req)) auth().redirectToSignIn();
+  if (isProtectedRoute(req)) auth().protect(() => {
+    if (!userId) {
+      auth().redirectToSignIn();
+      return false;
+    }
+    return true;
+  });
 });
 
-export const config = { matcher: ['/dashboard/:path*'] };
+export const config = {
+  matcher: ["/((?!.*\\..*|_next).*)", "/", "/(api|trpc)(.*)"],
+};
